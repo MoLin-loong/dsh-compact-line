@@ -70,9 +70,26 @@ test('client bundle 不引入 slots 之外的重型依赖', () => {
 
 test('README 里引用的测试文件都真实存在', () => {
   const readme = readFileSync(join(ROOT, 'README.md'), 'utf8')
-  const named = [...readme.matchAll(/node (test\/[\w.-]+\.mjs)/g)].map(m => m[1])
+  // 兼容两种写法：node test/x.test.mjs 与 node --test test/x.test.mjs
+  const named = [...readme.matchAll(/node\s+(?:--test\s+)?(test\/[\w.-]+\.mjs)/g)].map(m => m[1])
   assert.ok(named.length > 0, 'README 应列出测试命令')
   for (const rel of named) {
     assert.doesNotThrow(() => readFileSync(join(ROOT, rel)), rel + ' 在 README 里被引用但不存在')
   }
+})
+
+test('README 列出的用例数与实际文件一致', () => {
+  const readme = readFileSync(join(ROOT, 'README.md'), 'utf8')
+  const files = ['core', 'host', 'exports', 'client', 'validation', 'select']
+  let total = 0
+  for (const name of files) {
+    const src = readFileSync(join(ROOT, 'test', name + '.test.mjs'), 'utf8')
+    const count = (src.match(/^test\(/gm) || []).length
+    total += count
+    // README 里该文件的说明行应写明同样的数字
+    const line = readme.split('\n').find(l => l.includes('test/' + name + '.test.mjs'))
+    assert.ok(line, 'README 应列出 ' + name + '.test.mjs')
+    assert.match(line, new RegExp('\\b' + count + ' 例'), name + '.test.mjs 实际 ' + count + ' 例，README 未写对')
+  }
+  assert.ok(total > 0)
 })
