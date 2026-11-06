@@ -122,7 +122,7 @@ await applyToAllPresets(ctx, plan)
 不依赖任何框架或构建工具：
 
 ```sh
-node --test test/*.test.mjs    # 全套 75 例，秒级跑完
+node --test test/*.test.mjs    # 全套 79 例，秒级跑完
 ```
 
 > 别用 `node --test test/`：Node 22 起会把目录当成模块入口去 resolve，
@@ -136,7 +136,7 @@ node --test test/host.test.mjs        # 12 例：写入路径（假 ctx 驱动�
 node --test test/exports.test.mjs     # 10 例：导出形状 + client bundle 静态契约
 node --test test/client.test.mjs      #  8 例：bundle 真跑一遍，注册了哪些槽位
 node --test test/validation.test.mjs  #  6 例：输入解析不吞错
-node --test test/select.test.mjs      #  6 例：面板只有一个数字输入框
+node --test test/select.test.mjs      # 10 例：面板形态 + 设计变量名必须真实存在
 ```
 
 `client.test.mjs` 专门守住一次真事故：bundle 把 `inject` 写成 `[]`，宿主于是不给 `ctx` 挂 `slots`，第一次 `ctx.slots.inject` 就抛 TypeError，而 `apply` 自己的 try/catch 把它吞成一条没人看的 console.error——宿主侧全绿、日志干净、卡片就是不出现。
