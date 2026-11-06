@@ -29,9 +29,18 @@ jobs:
         run: node --version
 
       - name: 运行全部测试
-        # 用显式 glob 而不是目录：Node 22 会把 `node --test test/` 里的目录
-        # 当成模块入口去 resolve，直接 MODULE_NOT_FOUND。
-        run: node --test "test/*.test.mjs"
+        # 三种写法里只有显式列文件在所有场合都对：
+        #   node --test test/          Node 22 把目录当模块入口，MODULE_NOT_FOUND
+        #   node --test "test/*.mjs"   bash 不展开引号内的 glob，同上
+        #   node --test test/*.mjs     依赖 shell 展开，换到 cmd 就不行
+        run: |
+          node --test \
+            test/core.test.mjs \
+            test/host.test.mjs \
+            test/exports.test.mjs \
+            test/client.test.mjs \
+            test/validation.test.mjs \
+            test/select.test.mjs
 
       - name: 校验 package.json 与导出可解析
         run: |

@@ -122,11 +122,11 @@ await applyToAllPresets(ctx, plan)
 不依赖任何框架或构建工具：
 
 ```sh
-node --test "test/*.test.mjs"  # 全套 75 例，秒级跑完
+node --test test/*.test.mjs    # 全套 75 例，秒级跑完
 ```
 
-> 用 glob 而不是 `node --test test/`：Node 22 起会把目录当成模块入口去
-> resolve，直接 `MODULE_NOT_FOUND`。
+> 别用 `node --test test/`：Node 22 起会把目录当成模块入口去 resolve，
+> 直接 `MODULE_NOT_FOUND`。CI 里显式列文件，避免依赖 shell 的 glob 展开。
 
 也可以逐个跑：
 
