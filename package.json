@@ -1,0 +1,44 @@
+{
+  "name": "dsh-compact-line",
+  "version": "0.1.0",
+  "description": "把 DSH 的自动压缩线改成可直接填写的绝对 token 数：按模型上下文窗口自动换算比例、为窗口不足的模型单独兜底，并同步到每个 Agent 预设。",
+  "type": "module",
+  "license": "MIT",
+  "author": "MoLin-loong",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "keywords": [
+    "dsh-plugin",
+    "compaction",
+    "context"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots"
+      ],
+      "platform": "web"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MoLin-loong/dsh-compact-line.git"
+  },
+  "homepage": "https://github.com/MoLin-loong/dsh-compact-line#readme",
+  "bugs": {
+    "url": "https://github.com/MoLin-loong/dsh-compact-line/issues"
+  }
+}

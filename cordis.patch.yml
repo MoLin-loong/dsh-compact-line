@@ -1,0 +1,6 @@
+# 把压缩线插件挂到 profile 根上。
+# 它不注册任何模型或工具，只在 Loader 里拿到 configEditor，
+# 用宿主自己的写入路径改 Agent 预设里的 compaction-basic。
+- insert:
+    - id: dsh-compact-line
+      name: dsh-compact-line
