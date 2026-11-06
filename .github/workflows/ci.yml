@@ -29,7 +29,9 @@ jobs:
         run: node --version
 
       - name: 运行全部测试
-        run: node --test test/
+        # 用显式 glob 而不是目录：Node 22 会把 `node --test test/` 里的目录
+        # 当成模块入口去 resolve，直接 MODULE_NOT_FOUND。
+        run: node --test "test/*.test.mjs"
 
       - name: 校验 package.json 与导出可解析
         run: |
