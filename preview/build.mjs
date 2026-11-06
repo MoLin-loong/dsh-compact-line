@@ -41,15 +41,18 @@ const TOKENS = `
 body{margin:0;padding:28px 24px;min-height:100vh;
   background:linear-gradient(135deg,#2a2f3a,#1b1f26 55%,#242a35);
   font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;color:#e8e8ea}
-.stage{display:flex;flex-direction:column;gap:26px;align-items:flex-start}
+.stage{display:flex;flex-direction:column;gap:220px;align-items:flex-start;padding-top:40px}
 .label{font-size:11px;color:#7a7a85;letter-spacing:.04em;margin-bottom:-16px}
 `;
 
 /* 覆盖块必须放在抽取 CSS 之后：同优先级下后写的赢。
    真实环境里弹层是 absolute，预览里改成 relative 才好并排展示。 */
 const OVERRIDES = `
-.dcl-anchor{position:static}
-.dcl-pop{position:relative;bottom:auto;left:auto}
+/* 关键：不改 .dcl-pop 的 position / width / max-width。
+   上一版的错误就是在这里把弹层改成 relative + 固定宽度，
+   掩盖了真实环境里「max-width:100% 相对胶囊计算」导致压扁的问题。
+   这里只给容器留出空间，让 absolute 弹层能完整落在截图里。 */
+.dcl-anchor{display:inline-flex}
 `;
 
 const form = (value, msg) => `
@@ -81,14 +84,20 @@ const html = `<!doctype html>
     <button class="dcl-pill" type="button">压缩线 17万</button>
   </div>
 
-  <div class="label">弹层 · 正常</div>
-  <div class="dcl-pop">
-    ${form('170000', '<div class="dcl-ok">已写入 standard、ptc，压缩线 170000</div>')}
+  <div class="label">弹层 · 正常（真实结构：absolute 定位在胶囊上方）</div>
+  <div class="dcl-anchor">
+    <button class="dcl-pill" type="button">压缩线 17万</button>
+    <div class="dcl-pop">
+      ${form('170000', '<div class="dcl-ok">已写入 standard、ptc，压缩线 170000</div>')}
+    </div>
   </div>
 
   <div class="label">弹层 · 报错</div>
-  <div class="dcl-pop">
-    ${form('100000', '<div class="dcl-error">压缩线至少要 131072</div>')}
+  <div class="dcl-anchor">
+    <button class="dcl-pill" type="button">压缩线 17万</button>
+    <div class="dcl-pop">
+      ${form('100000', '<div class="dcl-error">压缩线至少要 131072</div>')}
+    </div>
   </div>
 
   <div class="label">设置页卡片</div>

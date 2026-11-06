@@ -170,9 +170,14 @@ test('不保留关闭按钮：点外部和 Esc 已足够', () => {
   assert.ok(!SOURCE.includes('aria-label: "关闭"'), '不应再有关闭按钮的节点')
 })
 
-test('弹层宽度自适应，不写死固定值', () => {
-  // 实测：输入框 + tokens + 三个按钮 + 间距 = 293px。写死宽度会溢出到
-  // 面板外（踩过一次）。max-content 让宽度跟着内容走，文案变了也不会破。
-  assert.match(SOURCE, /\.dcl-pop\{[^}]*width:max-content/, '弹层应用 max-content')
-  assert.match(SOURCE, /\.dcl-pop\{[^}]*max-width:min\(/, '仍需上限，避免窄屏溢出')
+test('弹层宽度贴合内容，且不依赖父元素百分比', () => {
+  // 三次踩坑：
+  //  1. 写死 236px —— 三个按钮 293px 溢出到面板外
+  //  2. max-content —— 受包含块约束，胶囊窄时被压扁
+  //  3. max-width 用 100% —— 相对胶囊算，弹层只剩一百多像素，文字全挤成两行
+  // fit-content 贴合最宽的行；max-width 用绝对像素，父元素多宽都不影响。
+  assert.match(SOURCE, /\.dcl-pop\{[^}]*width:fit-content/, '弹层应用 fit-content')
+  assert.match(SOURCE, /\.dcl-pop\{[^}]*max-width:min\(\d+px/, 'max-width 应用绝对像素')
+  assert.ok(!/\.dcl-pop\{[^}]*max-width:[^}]*100%/.test(SOURCE), 'max-width 不能含百分比')
+  assert.ok(!/\.dcl-pop\{[^}]*min-width:/.test(SOURCE), '不要 min-width，会把内容撑出空白')
 })
