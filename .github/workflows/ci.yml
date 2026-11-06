@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: 测试 (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 18 是当前 LTS；20 与 22 覆盖较新运行时。
+        # 插件用到的 API 只有 node:fs / node:test / structuredClone，跨度够宽。
+        node: ['18', '20', '22']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: 显示版本
+        run: node --version
+
+      - name: 运行全部测试
+        run: node --test test/
+
+      - name: 校验 package.json 与导出可解析
+        run: |
+          node --input-type=module -e "
+            import('./lib/index.js').then(m => {
+              if (m.name !== 'dsh-compact-line') throw new Error('入口 name 不对');
+              if (!Array.isArray(m.inject) || !m.inject.includes('loader')) throw new Error('inject 必须含 loader');
+              console.log('入口校验通过');
+            });
+          "
+
+      - name: 检查 README 引用的测试文件与用例数
+        run: node --test test/exports.test.mjs
+
+  lint:
+    name: 基本卫生检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 语法检查（四个模块）
+        run: |
+          for f in lib/index.js lib/core.js lib/host.js lib/client.js; do
+            node --check "$f" || exit 1
+          done
+
+      - name: 不应提交 node_modules 或构建产物
+        run: |
+          if git ls-files | grep -qE '(^|/)node_modules/'; then
+            echo "::error::node_modules 被提交了"
+            exit 1
+          fi
+
+      - name: 行尾不应是 CRLF（仓库用 LF）
+        run: |
+          bad=$(git ls-files --eol | grep 'w/crlf' || true)
+          if [ -n "$bad" ]; then
+            echo "::warning::以下文件在索引里是 CRLF，建议统一为 LF："
+            echo "$bad"
+          fi
+
+      - name: 源码里不应出现本机绝对路径
+        run: |
+          if git ls-files -z | xargs -0 grep -nE '[A-Z]:\\\\(Users|Program Files)' 2>/dev/null | grep -vE '\.github/workflows'; then
+            echo "::error::源码里出现了本机绝对路径"
+            exit 1
+          fi
+          echo "未发现本机绝对路径"
