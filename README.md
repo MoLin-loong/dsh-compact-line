@@ -142,12 +142,18 @@ dsh plugin --profile web add "file:<本目录>"
 不依赖任何框架或构建工具，直接跑：
 
 ```sh
-node test/core.test.mjs        # 22 例：换算、窗口约束、配置键集、预设结构
-node test/validation.test.mjs  #  6 例：输入解析不吞错
-node test/host.test.mjs        #     写入路径（假 ctx 驱动真实 host.js，含旧 retain 清理）
-node test/exports.test.mjs     #     导出形状 + client bundle 静态契约
-node test/client.test.mjs      #      bundle 真跑一遍，注册了哪些槽位
-node test/select.test.mjs      #      面板只有一个数字输入框，没有下拉、没有保留量
+node --test test/              # 全套 74 例，秒级跑完
+```
+
+也可以逐个跑：
+
+```sh
+node --test test/core.test.mjs        # 33 例：换算、窗口约束、配置键集、预设结构
+node --test test/host.test.mjs        # 12 例：写入路径（假 ctx 驱动真实 host.js，含旧 retain 清理）
+node --test test/exports.test.mjs     #  9 例：导出形状 + client bundle 静态契约
+node --test test/client.test.mjs      #  8 例：bundle 真跑一遍，注册了哪些槽位
+node --test test/validation.test.mjs  #  6 例：输入解析不吞错
+node --test test/select.test.mjs      #  6 例：面板只有一个数字输入框，没有下拉、没有保留量
 ```
 
 `client.test.mjs` 是补上去的，因为这里出过一次真事故：bundle 把 `inject` 写成了
