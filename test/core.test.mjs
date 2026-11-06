@@ -3,6 +3,8 @@ import test from 'node:test'
 
 import {
   DEFAULT_MAX_TOKENS,
+  canSettle,
+  retainRatioFor,
   DEFAULT_THRESHOLD_TOKENS,
   buildEngineConfig,
   dominant,
@@ -144,16 +146,23 @@ test('buildEngineConfig: headroomTokens 必须清零', () => {
   assert.equal(config.headroomTokens, 0)
 })
 
-test('buildEngineConfig: 不写 retainTokens / retainRatio', () => {
-  const config = buildEngineConfig(
-    { retainRatio: 0.16, retainTokens: 48000 },
-    { referenceRatio: 0.25, maxTokens: 65536, auto: true, policies: [] },
-  )
-  assert.equal(config.retainRatio, 0.16, '已有值保留不动')
-  assert.equal('retainTokens' in config, true)
-  // 但插件自己绝不新增这两个键
+test('buildEngineConfig: 接管 retainRatio，并删掉互斥的 retainTokens', () => {
+  // 设计变更：先前的实现把保留量交给上游默认（0.16），结果压完仍在压缩线上，
+  // 形成每十几秒一次的抖动。现在插件自己算保留比例。
+  const plan = { referenceRatio: 0.25, referenceRetainRatio: 0.1, maxTokens: 65536, auto: true, policies: [] }
+  const config = buildEngineConfig({ retainRatio: 0.16, retainTokens: 48000 }, plan)
+  assert.equal(config.retainRatio, 0.1, '用计划里的保留比例覆盖旧值')
+  assert.equal('retainTokens' in config, false, 'retainTokens 与 retainRatio 互斥，必须删掉')
+})
+
+test('buildEngineConfig: 计划没给保留比例时，已有的 retainRatio 原样保留', () => {
+  // 只有当前配置本来就带着 retainRatio 才会走到这里（用户手改过）。
+  // 插件不主动删除用户的显式设置，但也不会凭空造一个。
+  const config = buildEngineConfig({ retainRatio: 0.16 }, { referenceRatio: 0.25, maxTokens: 65536, auto: true, policies: [] })
+  assert.equal(config.retainRatio, 0.16)
+
+  // 全新配置则不出现该键
   const fresh = buildEngineConfig({}, { referenceRatio: 0.25, maxTokens: 65536, auto: true, policies: [] })
-  assert.equal('retainTokens' in fresh, false)
   assert.equal('retainRatio' in fresh, false)
 })
 
@@ -186,7 +195,7 @@ test('planFor: 单一窗口时不给多余覆盖', () => {
   assert.equal(plan.policies.length, 0)
 })
 
-test('planFor: 少数派窗口生成按需覆盖', () => {
+test('planFor: 少数派窗口生成按需覆盖，含各自的 retainRatio', () => {
   const plan = planFor(256000, 65536, [
     { provider: 'p', model: 'big', contextWindow: 1048576 },
     { provider: 'p', model: 'small', contextWindow: 200000 },
@@ -195,8 +204,11 @@ test('planFor: 少数派窗口生成按需覆盖', () => {
   assert.equal(plan.policies.length, 1)
   assert.equal(plan.policies[0].model, 'small')
   assert.equal(plan.policies[0].thresholdRatio, 0.9, '200K 窗口退到 90%')
-  assert.equal('retainTokens' in plan.policies[0], false)
-  assert.equal('retainRatio' in plan.policies[0], false)
+  assert.equal('retainTokens' in plan.policies[0], false, '只写比例，不写绝对量')
+  // 保留比例 = (目标线/2) / (窗口 - maxTokens)
+  const target = Math.floor((200000) * 0.9)
+  const expected = Number(((target / 2) / (200000 - 65536)).toFixed(12))
+  assert.equal(plan.policies[0].retainRatio, expected)
 })
 
 test('planFor: 窗口过小的模型被跳过并留下说明', () => {
@@ -240,4 +252,73 @@ test('dominant: 空数组返回 undefined', () => {
 test('默认值：压缩线 25.6 万，摘要上限 65536', () => {
   assert.equal(DEFAULT_THRESHOLD_TOKENS, 256000)
   assert.equal(DEFAULT_MAX_TOKENS, 65536)
+})
+
+/* ---------------------------------------------------- 抖动防护（新增） */
+
+test('canSettle: maxTokens 小于压缩线一半时放行', () => {
+  assert.deepEqual(canSettle(200000, 65536), { ok: true })
+})
+
+test('canSettle: maxTokens 达到一半时拒绝，并给出最低压缩线', () => {
+  const r = canSettle(100000, 65536)
+  assert.equal(r.ok, false)
+  assert.equal(r.minimumThreshold, 131072)
+  assert.match(r.reason, /再次超过压缩线/)
+})
+
+test('canSettle: 刚好在边界上仍然拒绝（压后等于压缩线）', () => {
+  assert.equal(canSettle(131072, 65536).ok, false)
+})
+
+test('canSettle: 略高于边界放行', () => {
+  assert.equal(canSettle(131073, 65536).ok, true)
+})
+
+test('canSettle: 非法输入', () => {
+  assert.equal(canSettle(0, 65536).ok, false)
+  assert.equal(canSettle(200000, 0).ok, false)
+  assert.equal(canSettle(NaN, 65536).ok, false)
+})
+
+test('retainRatioFor: 压后总量恒等于 压缩线一半 + maxTokens', () => {
+  // 这个不变式与窗口大小无关 —— 预算项在公式里抵消了。
+  for (const window of [192000, 960000, 1000000, 1048576]) {
+    const threshold = 200000
+    const max = 65536
+    const rr = retainRatioFor(threshold, max, window)
+    const messageBudget = window - max
+    const retain = Math.floor(messageBudget * rr)
+    const after = retain + max
+    assert.ok(
+      Math.abs(after - (threshold / 2 + max)) <= 1,
+      '窗口 ' + window + ' 上压后应为 ' + (threshold / 2 + max) + '，实际 ' + after,
+    )
+    assert.ok(after < threshold, '窗口 ' + window + ' 上压后必须低于压缩线')
+  }
+})
+
+test('retainRatioFor: 小窗口保留的原文更少', () => {
+  // 注意目标线超过窗口时会被 effectiveThreshold 截断，所以这里比较的是
+  // 「同一个模型实际能用的目标线」：192K 窗口取 90% 后是 113817。
+  const big = retainRatioFor(200000, 65536, 1048576)
+  const retainBig = Math.floor((1048576 - 65536) * big)
+
+  const smallTarget = Math.floor((192000 - 65536) * 0.9) + 0
+  const smallWindowTarget = Math.floor(192000 * 0.9)
+  const small = retainRatioFor(smallWindowTarget, 65536, 192000)
+  const retainSmall = Math.floor((192000 - 65536) * small)
+
+  assert.ok(retainSmall < retainBig, '小窗口应保留更少原文: ' + retainSmall + ' < ' + retainBig)
+})
+
+test('retainRatioFor: 窗口小于 maxTokens 时返回 undefined', () => {
+  assert.equal(retainRatioFor(200000, 65536, 60000), undefined)
+})
+
+test('planFor: 计划携带 referenceRetainRatio 与 settledAt', () => {
+  const plan = planFor(200000, 65536, [{ provider: 'p', model: 'm', contextWindow: 1000000 }])
+  assert.equal(typeof plan.referenceRetainRatio, 'number')
+  assert.equal(plan.settledAt, 165536, '压后估算 = 目标线一半 + maxTokens')
+  assert.ok(plan.settledAt < plan.thresholdTokens, '必须落在压缩线下方')
 })

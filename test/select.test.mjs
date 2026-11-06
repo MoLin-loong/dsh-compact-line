@@ -74,6 +74,7 @@ const KNOWN_TOKENS = new Set([
   '--dsw-alias-label-caption', '--dsw-alias-label-primary-inverted',
   '--dsw-alias-button-primary-fill', '--dsw-alias-button-primary-hover',
   '--dsw-alias-state-error-primary', '--dsw-alias-state-success-primary',
+  '--dsw-alias-brand-primary',
   '--dsw-alias-state-warn-primary', '--dsw-specific-menu',
   '--dsw-elevation-prominent', '--dsw-elevation-stroke-color',
   '--dsw-radius-sm', '--dsw-radius-md', '--dsw-radius-lg',
@@ -106,4 +107,72 @@ test('不再出现已知不存在的旧变量名', () => {
 test('按钮分主次，不是一个样', () => {
   assert.match(SOURCE, /dcl-btn-primary/, '应有主按钮样式')
   assert.match(SOURCE, /dcl-btn-ghost/, '应有次按钮样式')
+})
+
+/* --------------------------------------------------- 文案保持简短 */
+
+test('面板不再出现大段解释性文字', () => {
+  // 用户明确要求「多余文字不要」。这些是历次删掉的长文案，出现任何一个
+  // 都说明又被加回来了。注释里提到它们（说明为什么删）不算。
+  const code = SOURCE.split('\n').filter(line => {
+    const t = line.trim()
+    return !t.startsWith('//') && !t.startsWith('*') && !t.startsWith('/*')
+  }).join('\n')
+
+  const banned = [
+    '自己算 —— 这里不接管',
+    '分母是每个模型自己的窗口',
+    '用来核对这个比例实际对应多少 token',
+    '已经开始的会话要等下一轮',
+    '升级 DSH 前建议先点一次',
+    '由预设比例 × 参考窗口',
+    '"上次写入 ',
+  ]
+  for (const text of banned) {
+    assert.ok(!code.includes(text), '长文案不应出现：' + text)
+  }
+})
+
+test('面板里最长的可见文案不超过 20 字', () => {
+  // 只查会显示在面板上的文字。title / aria-label 是悬停与读屏用的，
+  // 不占版面，长一点更好（信息可以藏在那里而不撑宽面板）。
+  const visible = SOURCE
+    .split('\n')
+    .filter(line => !/title:|aria-label|\/\//.test(line))
+    .join('\n')
+  const literals = [...visible.matchAll(/"([\u4e00-\u9fa5][^"]{0,60})"/g)].map(m => m[1])
+  const long = literals.filter(s => s.length > 20)
+  assert.deepEqual(long, [], '以下文案过长：' + long.join(' | '))
+})
+
+test('表单只保留一行简短说明', () => {
+  assert.match(SOURCE, /压完保留这条线的一半/, '应保留这句关键说明')
+})
+
+/* --------------------------------------------------- 窄容器布局约束 */
+
+test('按钮禁止换行（否则窄弹层里「刷新」会竖排）', () => {
+  // 真实故障：弹层收到 260px 后，flex 的默认 shrink 把两个字的按钮
+  // 压成「刷/新」两行，整个面板看起来像坏了。
+  assert.match(SOURCE, /\.dcl-btn\{[^}]*white-space:nowrap/, '按钮必须 nowrap')
+  assert.match(SOURCE, /\.dcl-btn\{[^}]*flex:none/, '按钮不能被压缩')
+})
+
+test('输入框与单位不被同行按钮挤压', () => {
+  assert.match(SOURCE, /\.dcl-input\{[^}]*flex:none/)
+  assert.match(SOURCE, /\.dcl-unit\{[^}]*flex:none/)
+})
+
+test('不保留关闭按钮：点外部和 Esc 已足够', () => {
+  // 用户原话「x 也不用保留，都没点过 x」。删掉后省一行，也免了右上角
+  // 与应用按钮抢位置（那正是上一版的故障）。
+  assert.ok(!SOURCE.includes('.dcl-close'), '不应再有关闭按钮的样式')
+  assert.ok(!SOURCE.includes('aria-label: "关闭"'), '不应再有关闭按钮的节点')
+})
+
+test('弹层宽度自适应，不写死固定值', () => {
+  // 实测：输入框 + tokens + 三个按钮 + 间距 = 293px。写死宽度会溢出到
+  // 面板外（踩过一次）。max-content 让宽度跟着内容走，文案变了也不会破。
+  assert.match(SOURCE, /\.dcl-pop\{[^}]*width:max-content/, '弹层应用 max-content')
+  assert.match(SOURCE, /\.dcl-pop\{[^}]*max-width:min\(/, '仍需上限，避免窄屏溢出')
 })

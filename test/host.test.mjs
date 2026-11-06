@@ -94,13 +94,15 @@ test('applyToAllPresets: 写入的压缩线符合计划', async () => {
   assert.equal(engine.config.maxTokens, 65536)
 })
 
-test('applyToAllPresets: 旧版遗留的 retain 字段被清掉', async () => {
+test('applyToAllPresets: 旧版遗留的 retainTokens 被清掉，retainRatio 被新值覆盖', async () => {
+  // 设计变更：保留量重新由插件接管。旧的绝对量 retainTokens 与新的比例互斥，
+  // 必须删；旧的 retainRatio（0.16）会被计划里的新值覆盖。
   const presets = [makePreset('ptc', { retainTokens: 48000, retainRatio: 0.16, thresholdRatio: 0.25 })]
   await applyToAllPresets(makeCtx(presets, makeEditor(), []), PLAN)
 
   const engine = presets[0].options.config.plugins[1].config[0]
-  assert.equal('retainTokens' in engine.config, false)
-  assert.equal('retainRatio' in engine.config, false)
+  assert.equal('retainTokens' in engine.config, false, '互斥的绝对量必须删掉')
+  assert.equal(engine.config.retainRatio, PLAN.referenceRetainRatio, '旧比例应被新计划覆盖')
 })
 
 test('applyToAllPresets: 同组兄弟插件不被冲掉', async () => {
@@ -191,4 +193,51 @@ test('restorePresetDefaults: 缺 configuration() 时拒绝而不是瞎猜', asyn
   const result = await restorePresetDefaults(ctx)
   assert.equal(result.ok, false)
   assert.match(result.reason, /configuration/)
+})
+
+/* ------------------------------------------ 写入后 retainRatio 必须存活 */
+
+test('applyToAllPresets: 写入的配置里真的带 retainRatio', async () => {
+  // 这条守住一次真事故：buildEngineConfig 生成了 retainRatio，紧接着一行
+  // delete engineConfig.retainRatio 又把它删掉，于是配置里永远只有
+  // thresholdRatio，上游回退默认 0.16，压完仍高于压缩线 → 每十几秒一次抖动。
+  const presets = [makePreset('ptc', { thresholdRatio: 0.15 })]
+  const plan = planFor(150000, 65536, [
+    { provider: 'fake', model: 'm', contextWindow: 1000000 },
+  ])
+  await applyToAllPresets(makeCtx(presets, makeEditor(), []), plan)
+
+  const engine = presets[0].options.config.plugins[1].config[0]
+  assert.equal(typeof engine.config.retainRatio, 'number', '主配置必须带 retainRatio')
+  assert.ok(engine.config.retainRatio > 0 && engine.config.retainRatio < 1)
+  assert.equal('retainTokens' in engine.config, false, '互斥的绝对量必须删掉')
+})
+
+test('applyToAllPresets: 主配置的 retainRatio 与计划一致', async () => {
+  const presets = [makePreset('ptc', {})]
+  const plan = planFor(150000, 65536, [
+    { provider: 'fake', model: 'm', contextWindow: 1000000 },
+  ])
+  await applyToAllPresets(makeCtx(presets, makeEditor(), []), plan)
+
+  const engine = presets[0].options.config.plugins[1].config[0]
+  assert.equal(engine.config.retainRatio, plan.referenceRetainRatio)
+})
+
+test('applyToAllPresets: 写完能落到压缩线下方（防抖不变式）', async () => {
+  const presets = [makePreset('ptc', {})]
+  const threshold = 150000
+  const max = 65536
+  const plan = planFor(threshold, max, [{ provider: 'fake', model: 'm', contextWindow: 1000000 }])
+  await applyToAllPresets(makeCtx(presets, makeEditor(), []), plan)
+
+  const engine = presets[0].options.config.plugins[1].config[0]
+  const window = 1000000
+  const messageBudget = window - max
+  const retain = Math.floor(messageBudget * engine.config.retainRatio)
+  const afterCompact = retain + max
+  assert.ok(
+    afterCompact < threshold,
+    '压后 ' + afterCompact + ' 必须低于压缩线 ' + threshold,
+  )
 })

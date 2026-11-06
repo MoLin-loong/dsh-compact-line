@@ -122,7 +122,7 @@ await applyToAllPresets(ctx, plan)
 不依赖任何框架或构建工具：
 
 ```sh
-node --test test/*.test.mjs    # 全套 79 例，秒级跑完
+node --test test/*.test.mjs    # 全套 99 例，秒级跑完
 ```
 
 > 别用 `node --test test/`：Node 22 起会把目录当成模块入口去 resolve，
@@ -131,12 +131,12 @@ node --test test/*.test.mjs    # 全套 79 例，秒级跑完
 也可以逐个跑：
 
 ```sh
-node --test test/core.test.mjs        # 33 例：换算、窗口约束、配置键集、预设结构
-node --test test/host.test.mjs        # 12 例：写入路径（假 ctx 驱动真实 host.js）
+node --test test/core.test.mjs        # 43 例：换算、窗口约束、配置键集、预设结构
+node --test test/host.test.mjs        # 15 例：写入路径（假 ctx 驱动真实 host.js）
 node --test test/exports.test.mjs     # 10 例：导出形状 + client bundle 静态契约
 node --test test/client.test.mjs      #  8 例：bundle 真跑一遍，注册了哪些槽位
 node --test test/validation.test.mjs  #  6 例：输入解析不吞错
-node --test test/select.test.mjs      # 10 例：面板形态 + 设计变量名必须真实存在
+node --test test/select.test.mjs      # 17 例：面板形态 + 设计变量名必须真实存在
 ```
 
 `client.test.mjs` 专门守住一次真事故：bundle 把 `inject` 写成 `[]`，宿主于是不给 `ctx` 挂 `slots`，第一次 `ctx.slots.inject` 就抛 TypeError，而 `apply` 自己的 try/catch 把它吞成一条没人看的 console.error——宿主侧全绿、日志干净、卡片就是不出现。
@@ -172,7 +172,8 @@ node --test test/select.test.mjs      # 10 例：面板形态 + 设计变量名�
 - 参考窗口取**出现最多的那个**——默认比例对大多数模型直接成立，`modelPolicies` 只用来纠正少数派，配置不会膨胀成一张全模型表
 - 窗口装不下目标线时退到可用窗口的 90%
 - `headroomTokens` 写 0。它默认 65536，会从触发线里再扣一段，让实际压缩点早于你填的数字。插件承诺「填多少就是多少」，所以清零
-- **不写 `retainTokens` / `retainRatio`**。压缩后留多少交给上游按它自己的比例决定——插件只回答「什么时候压」
+- **接管 `retainRatio`**，并且必须接管：`retainRatio = (压缩线 / 2) / (窗口 - maxTokens)`。上游默认 0.16，在 1M 窗口上压完约 15.7万 + 6.5万 = 22.2万，仍高于压缩线，于是压完立刻再压——实测每十几秒一次。插件这条公式让压后总量恒等于 `压缩线/2 + maxTokens`，与窗口大小无关，只要 `maxTokens < 压缩线/2` 就必然落到线下方
+- `retainTokens` 与 `retainRatio` 互斥，写前者会让绝对量锁死上限、换模型时不再跟随窗口缩放，所以显式删除
 
 </details>
 
@@ -182,6 +183,7 @@ node --test test/select.test.mjs      # 10 例：面板形态 + 设计变量名�
 - `compaction-basic` 没有 `thresholdTokens` 字段。`resolveConfig()` 的键集固定，传未知键加载即抛错
 - 压缩线必须小于可用窗口，否则永远不触发
 - 保留量必须小于压缩线，否则上游拒绝加载
+- `maxTokens ≥ 压缩线 / 2` 时压完仍在线上，上游**不报错**，只会反复压缩。插件在写入前直接拒绝并说明最低该填多少
 
 </details>
 
