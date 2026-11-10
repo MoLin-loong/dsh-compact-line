@@ -66,7 +66,7 @@ const form = (value, msg) => `
       <button class="dcl-btn dcl-btn-ghost" type="button">刷新</button>
       <button class="dcl-btn dcl-btn-ghost" type="button">恢复默认</button>
     </div>
-    <div class="dcl-note">压完保留这条线的一半</div>
+    <div class="dcl-note">压完保留原文约一半</div>
     ${msg}
   </div>`;
 
@@ -111,7 +111,7 @@ const html = `<!doctype html>
       <button class="dcl-btn dcl-btn-ghost" type="button">刷新</button>
       <button class="dcl-btn dcl-btn-ghost" type="button">恢复默认</button>
     </div>
-    <div class="dcl-note">压完保留这条线的一半</div>
+    <div class="dcl-note">压完保留原文约一半</div>
     <table class="dcl-table">
       <thead><tr><th>预设</th><th>压缩线</th></tr></thead>
       <tbody>
