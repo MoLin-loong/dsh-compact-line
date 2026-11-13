@@ -205,9 +205,9 @@ test('planFor: 少数派窗口生成按需覆盖，含各自的 retainRatio', ()
   assert.equal(plan.policies[0].model, 'small')
   assert.equal(plan.policies[0].thresholdRatio, 0.9, '200K 窗口退到 90%')
   assert.equal('retainTokens' in plan.policies[0], false, '只写比例，不写绝对量')
-  // 新公式：保留比例 = 目标线 / (2 * 窗口)，maxTokens 不参与分母
+  // 公式：保留比例 = 目标线 / (4 * 窗口)，maxTokens 不参与分母
   const target = Math.floor((200000) * 0.9)
-  const expected = Number((target / (2 * 200000)).toFixed(12))
+  const expected = Number((target / (4 * 200000)).toFixed(12))
   assert.equal(plan.policies[0].retainRatio, expected)
 })
 
@@ -281,8 +281,8 @@ test('canSettle: 非法输入', () => {
   assert.equal(canSettle(NaN, 65536).ok, false)
 })
 
-test('retainRatioFor: 压后总量 = 压缩线一半 + maxTokens 的衰减余项', () => {
-  // 新公式 retainRatio = T/(2W)，压后总量 = T/2 + M * (1 - T/(2W))。
+test('retainRatioFor: 压后总量 = 压缩线四分之一 + maxTokens 的衰减余项', () => {
+  // 公式 retainRatio = T/(4W)，压后总量 = T/4 + M * (1 - T/(4W))。
   for (const window of [192000, 960000, 1000000, 1048576]) {
     const threshold = 200000
     const max = 65536
@@ -290,7 +290,7 @@ test('retainRatioFor: 压后总量 = 压缩线一半 + maxTokens 的衰减余项
     const messageBudget = window - max
     const retain = Math.floor(messageBudget * rr)
     const after = retain + max
-    const expected = threshold / 2 + max * (1 - threshold / (2 * window))
+    const expected = threshold / 4 + max * (1 - threshold / (4 * window))
     assert.ok(
       Math.abs(after - expected) <= 2,
       '窗口 ' + window + ' 上压后应约 ' + Math.round(expected) + '，实际 ' + after,
@@ -314,10 +314,10 @@ test('retainRatioFor: 小窗口保留的原文更少', () => {
 })
 
 test('retainRatioFor: 比例不小于 1 时返回 undefined', () => {
-  // 窗口极小时 T/(2W) >= 1，保留量会占满可用预算，配置无意义。
-  assert.equal(retainRatioFor(200000, 65536, 60000), undefined, '200000/(2*60000) > 1')
-  assert.equal(retainRatioFor(200000, 65536, 100000), undefined, '200000/(2*100000) = 1')
-  assert.ok(typeof retainRatioFor(200000, 65536, 400000) === 'number', '0.25 合法')
+  // 窗口极小时 T/(4W) >= 1，保留量会占满可用预算，配置无意义。
+  assert.equal(retainRatioFor(200000, 65536, 40000), undefined, '200000/(4*40000) > 1')
+  assert.equal(retainRatioFor(200000, 65536, 50000), undefined, '200000/(4*50000) = 1')
+  assert.ok(typeof retainRatioFor(200000, 65536, 400000) === 'number', '0.125 合法')
 })
 
 test('planFor: 计划携带 referenceRetainRatio 与 settledAt', () => {
